@@ -1,0 +1,272 @@
+---
+title: "R for Data Science"
+author: "Dan Reilly"
+format: 
+  html:
+    self-contained: true
+editor: visual
+---
+
+# Factors
+
+## **17.2 Factor basics**
+
+```{r}
+library(tidyverse)
+```
+
+## **17.3 General Social Survey**
+
+```{r}
+gss_cat
+```
+
+## **17.4 Modifying factor order**
+
+```{r}
+relig_summary <- gss_cat |>
+  group_by(relig) |>
+  summarize(
+    tvhours = mean(tvhours, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(relig_summary, aes(x = tvhours, y = relig)) + 
+  geom_point()
+```
+
+```{r}
+ggplot(relig_summary, aes(x = tvhours, y = fct_reorder(relig, tvhours))) +
+  geom_point()
+```
+
+```{r}
+rincome_summary <- gss_cat |>
+  group_by(rincome) |>
+  summarize(
+    age = mean(age, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(rincome_summary, aes(x = age, y = fct_reorder(rincome, age))) + 
+  geom_point()
+
+by_age <- gss_cat |>
+  filter(!is.na(age)) |> 
+  count(age, marital) |>
+  group_by(age) |>
+  mutate(
+    prop = n / sum(n)
+  )
+
+ggplot(by_age, aes(x = age, y = prop, color = marital)) +
+  geom_line(linewidth = 1) + 
+  scale_color_brewer(palette = "Set1")
+
+ggplot(by_age, aes(x = age, y = prop, color = fct_reorder2(marital, age, prop))) +
+  geom_line(linewidth = 1) +
+  scale_color_brewer(palette = "Set1") + 
+  labs(color = "marital") 
+```
+
+For bar plots, you can use [`fct_infreq()`](https://forcats.tidyverse.org/reference/fct_inorder.html) to order levels in decreasing frequency: this is the simplest type of reordering because it doesn't need any extra variables. Combine it with [`fct_rev()`](https://forcats.tidyverse.org/reference/fct_rev.html) if you want them in increasing frequency so that in the bar plot largest values are on the right, not the left.
+
+```{r}
+gss_cat |>
+  mutate(marital = marital |> fct_infreq() |> fct_rev()) |>
+  ggplot(aes(x = marital)) +
+  geom_bar()
+```
+
+## **17.5 Modifying factor levels**
+
+[`fct_recode()`](https://forcats.tidyverse.org/reference/fct_recode.html). It allows you to recode, or change, the value of each level. For example, take the `partyid` variable from the `gss_cat` data frame:
+
+```{r}
+gss_cat |>
+  mutate(
+    partyid = fct_recode(partyid,
+      "Republican, strong"    = "Strong republican",
+      "Republican, weak"      = "Not str republican",
+      "Independent, near rep" = "Ind,near rep",
+      "Independent, near dem" = "Ind,near dem",
+      "Democrat, weak"        = "Not str democrat",
+      "Democrat, strong"      = "Strong democrat"
+    )
+  ) |>
+  count(partyid)
+
+```
+
+If you want to collapse a lot of levels, [`fct_collapse()`](https://forcats.tidyverse.org/reference/fct_collapse.html) is a useful variant of [`fct_recode()`](https://forcats.tidyverse.org/reference/fct_recode.html). For each new variable, you can provide a vector of old levels:
+
+```{r}
+gss_cat |>
+  mutate(
+    partyid = fct_collapse(partyid,
+      "other" = c("No answer", "Don't know", "Other party"),
+      "rep" = c("Strong republican", "Not str republican"),
+      "ind" = c("Ind,near rep", "Independent", "Ind,near dem"),
+      "dem" = c("Not str democrat", "Strong democrat")
+    )
+  ) |>
+  count(partyid)
+```
+
+Sometimes you just want to lump together the small groups to make a plot or table simpler. That's the job of the `fct_lump_*()` family of functions. [`fct_lump_lowfreq()`](https://forcats.tidyverse.org/reference/fct_lump.html) is a simple starting point that progressively lumps the smallest groups categories into "Other", always keeping "Other" as the smallest category.
+
+```{r}
+gss_cat |>
+  mutate(relig = fct_lump_lowfreq(relig)) |>
+  count(relig)
+```
+
+## **17.6 Ordered factors**
+
+Ordered factors, created with [`ordered()`](https://rdrr.io/r/base/factor.html), imply a strict ordering and equal distance between levels: the first level is "less than" the second level by the same amount that the second level is "less than" the third level, and so on. 
+
+```{r}
+ordered(c("a", "b", "c"))
+```
+
+# **18  Dates and times**
+
+### **18.1.1 Prerequisites**
+
+This chapter will focus on the **lubridate** package, which makes it easier to work with dates and times in R. As of the latest tidyverse release, lubridate is part of core tidyverse. We will also need nycflights13 for practice data.
+
+## **18.2 Creating date/times**
+
+There are three types of date/time data that refer to an instant in time:
+
+-   A **date**. Tibbles print this as `<date>`.
+
+-   A **time** within a day. Tibbles print this as `<time>`.
+
+-   A **date-time** is a date plus a time: it uniquely identifies an instant in time (typically to the nearest second). Tibbles print this as `<dttm>`. Base R calls these POSIXct, but doesn't exactly trip off the tongue.
+
+```{r}
+library(tidyverse)
+library(nycflights13)
+
+today()
+now()
+```
+
+Link - <https://r4ds.hadley.nz/datetimes.html#tbl-date-formats>
+
+### **18.2.2 From strings**
+
+The date-time specification language is powerful, but requires careful analysis of the date format. An alternative approach is to use lubridate's helpers which attempt to automatically determine the format once you specify the order of the component.
+
+### **18.2.4 From other types**
+
+You may want to switch between a date-time and a date. That's the job of [`as_datetime()`](https://lubridate.tidyverse.org/reference/as_date.html) and [`as_date()`](https://lubridate.tidyverse.org/reference/as_date.html):
+
+```{r}
+as_datetime(today())
+as_date(now())
+```
+
+## **18.3 Date-time components**
+
+Now that you know how to get date-time data into R's date-time data structures, let's explore what you can do with them. This section will focus on the [accessor]{style="color: orange"} functions that let you get and set individual components.
+
+### **18.3.1 Getting components**
+
+You can pull out individual parts of the date with the accessor functions [`year()`](https://lubridate.tidyverse.org/reference/year.html), [`month()`](https://lubridate.tidyverse.org/reference/month.html), [`mday()`](https://lubridate.tidyverse.org/reference/day.html) (day of the month), [`yday()`](https://lubridate.tidyverse.org/reference/day.html) (day of the year), [`wday()`](https://lubridate.tidyverse.org/reference/day.html) (day of the week), [`hour()`](https://lubridate.tidyverse.org/reference/hour.html), [`minute()`](https://lubridate.tidyverse.org/reference/minute.html), and [`second()`](https://lubridate.tidyverse.org/reference/second.html). These are effectively the opposites of [`make_datetime()`](https://lubridate.tidyverse.org/reference/make_datetime.html).
+
+For [`month()`](https://lubridate.tidyverse.org/reference/month.html) and [`wday()`](https://lubridate.tidyverse.org/reference/day.html) you can set `label = TRUE` to return the abbreviated name of the month or day of the week. Set `abbr = FALSE` to return the full name.
+
+yday(datetime)
+
+#\> \[1\] 189
+
+```{r}
+datetime <- ymd_hms("2026-07-08 12:34:56")
+
+year(datetime)
+month(datetime)
+mday(datetime)
+yday(datetime)
+wday(datetime)
+```
+
+We can use [`wday()`](https://lubridate.tidyverse.org/reference/day.html) to see that more flights depart during the week than on the weekend:
+
+```{r}
+flights_dt |> 
+  mutate(wday = wday(dep_time, label = TRUE)) |> 
+  ggplot(aes(x = wday)) +
+  geom_bar()
+```
+
+## **18.4 Time spans**
+
+Next you'll learn about how arithmetic with dates works, including subtraction, addition, and division. Along the way, you'll learn about three important classes that represent time spans:
+
+## **18.5 Time zones**
+
+Time zones are an enormously complicated topic because of their interaction with geopolitical entities. Fortunately we don't need to dig into all the details as they're not all important for data analysis, but there are a few challenges we'll need to tackle head on.
+
+-   **Durations**, which represent an exact number of seconds.
+
+-   **Periods**, which represent human units like weeks and months.
+
+-   **Intervals**, which represent a starting and ending point.
+
+# **19  Missing values**
+
+### **19.2.2 Fixed values**
+
+Some times missing values represent some fixed and known value, most commonly 0. You can use [`dplyr::coalesce()`](https://dplyr.tidyverse.org/reference/coalesce.html) to replace them:
+
+```{r}
+x <- c(1, 4, 5, 7, NA)
+coalesce(x, 0)
+```
+
+```{r}
+stocks <- tibble(
+  year  = c(2020, 2020, 2020, 2020, 2021, 2021, 2021),
+  qtr   = c(   1,    2,    3,    4,    2,    3,    4),
+  price = c(1.88, 0.59, 0.35,   NA, 0.92, 0.17, 2.66)
+)
+stocks
+```
+
+```{r}
+stocks |>
+  pivot_wider(
+    names_from = qtr, 
+    values_from = price)
+
+```
+
+### **19.3.3 Joins**
+
+This brings us to another important way of revealing implicitly missing observations: joins. You'll learn more about joins in [Chapter 20](https://r4ds.hadley.nz/joins.html), but we wanted to quickly mention them to you here since you can often only know that values are missing from one dataset when you compare it to another.
+
+`dplyr::anti_join(x, y)` is a particularly useful tool here because it selects only the rows in `x` that don't have a match in `y`. For example, we can use two [`anti_join()`](https://dplyr.tidyverse.org/reference/filter-joins.html)s to reveal that we're missing information for four airports and 722 planes mentioned in `flights`:
+
+# **20  Joins**
+
+## **20.2 Keys**
+
+To understand joins, you need to first understand how two tables can be connected through a pair of keys, within each table.
+
+## **20.3 Basic joins**
+
+Now that you understand how data frames are connected via keys, we can start using joins to better understand the `flights` dataset. dplyr provides six join functions: [`left_join()`](https://dplyr.tidyverse.org/reference/mutate-joins.html), [`inner_join()`](https://dplyr.tidyverse.org/reference/mutate-joins.html), [`right_join()`](https://dplyr.tidyverse.org/reference/mutate-joins.html), [`full_join()`](https://dplyr.tidyverse.org/reference/mutate-joins.html), [`semi_join()`](https://dplyr.tidyverse.org/reference/filter-joins.html), and `anti_join().`
+
+```{r}
+library(nycflights13)
+
+flights2 <- flights |> 
+  select(year, time_hour, origin, dest, tailnum, carrier)
+
+flights2 |> 
+  left_join(airlines, by = "carrier")
+#> Joining with `by = join_by(carrier)`
+
+```
